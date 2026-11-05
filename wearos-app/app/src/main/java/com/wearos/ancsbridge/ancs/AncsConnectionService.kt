@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.telecom.Connection
@@ -42,10 +43,22 @@ class AncsConnectionService : ConnectionService() {
         }
 
         /**
+         * Telecom is optional on Wear OS (e.g. the OnePlus Watch 2 doesn't ship it), and
+         * registerPhoneAccount throws UnsupportedOperationException without it. Calls then
+         * fall back to IncomingCallActivity + the CallStyle notification.
+         */
+        fun isTelecomSupported(context: Context): Boolean =
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELECOM)
+
+        /**
          * Register the PhoneAccount with TelecomManager. Must be called once
          * (e.g., on app startup or service start).
          */
         fun registerPhoneAccount(context: Context) {
+            if (!isTelecomSupported(context)) {
+                Log.w(TAG, "No Telecom on this device; skipping PhoneAccount registration")
+                return
+            }
             val handle = getPhoneAccountHandle(context)
             val account = PhoneAccount.builder(handle, "WearBridge")
                 .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
@@ -66,6 +79,7 @@ class AncsConnectionService : ConnectionService() {
             callerName: String,
             appName: String
         ) {
+            if (!isTelecomSupported(context)) return
             val handle = getPhoneAccountHandle(context)
             val extras = Bundle().apply {
                 putLong(EXTRA_NOTIFICATION_UID, notificationUid)
