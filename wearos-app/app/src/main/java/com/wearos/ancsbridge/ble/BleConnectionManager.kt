@@ -498,6 +498,15 @@ class BleConnectionManager(private val context: Context) {
         isWritingDescriptor = false
     }
 
+    /** The stack is gone: our BluetoothGatt is dead and no disconnect callback will come. */
+    fun onBluetoothOff() {
+        reconnectJob?.cancel()
+        gatt?.close()
+        gatt = null
+        clearCharacteristics()
+        _connectionState.value = ConnectionState.Disconnected("Bluetooth restarted")
+    }
+
     fun destroy() {
         autoReconnect = false
         reconnectJob?.cancel()
