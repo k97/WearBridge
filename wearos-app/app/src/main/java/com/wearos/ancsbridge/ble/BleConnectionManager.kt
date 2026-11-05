@@ -37,6 +37,20 @@ class BleConnectionManager(private val context: Context) {
         private const val INITIAL_RECONNECT_DELAY_MS = 3_000L
         private const val TARGET_MTU = 512
         private const val MAX_SERVICE_DISCOVERY_RETRIES = 2
+        private const val PREFS_NAME = "wearbridge"
+        private const val KEY_PAIRED_IPHONE = "paired_iphone_address"
+
+        /**
+         * The bonded device that last gave us an ANCS session. Name matching alone misses
+         * iPhones that were renamed, or that bonded without a name (paired from iPhone
+         * Settings -> Bluetooth), so getBondedIPhone() returned null after a reboot.
+         */
+        fun savedIPhone(context: Context): BluetoothDevice? {
+            val address = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_PAIRED_IPHONE, null) ?: return null
+            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+            return adapter?.bondedDevices?.firstOrNull { it.address == address }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -189,6 +203,10 @@ class BleConnectionManager(private val context: Context) {
                 }
                 AncsConstants.NOTIFICATION_SOURCE_UUID -> {
                     Log.i(TAG, "Subscribed to Notification Source — ANCS session active!")
+                    gatt?.device?.address?.let { address ->
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putString(KEY_PAIRED_IPHONE, address).apply()
+                    }
                     // Show initial name (may be truncated BLE name)
                     val deviceName = resolveDeviceName()
                     _connectionState.value = ConnectionState.Connected(deviceName)
@@ -439,6 +457,7 @@ class BleConnectionManager(private val context: Context) {
      * Get the bonded iPhone device if one exists.
      */
     fun getBondedIPhone(): BluetoothDevice? {
+        savedIPhone(context)?.let { return it }
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = bluetoothManager.adapter ?: return null
         return adapter.bondedDevices?.firstOrNull { device ->
