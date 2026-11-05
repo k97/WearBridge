@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wearos.ancsbridge.ancs.AncsService
+import com.wearos.ancsbridge.ble.BleConnectionManager
 import com.wearos.ancsbridge.ble.BleScanner
 import com.wearos.ancsbridge.model.ConnectionState
 import kotlinx.coroutines.Job
@@ -151,6 +152,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hasBondedIPhone(): Boolean {
         val context = getApplication<Application>()
+        if (BleConnectionManager.savedIPhone(context) != null) return true
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = manager.adapter ?: return false
         return adapter.bondedDevices.any { device ->
