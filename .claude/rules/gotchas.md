@@ -31,3 +31,9 @@
 15. **Multi-watch ANCS prioritization**: When multiple watches are bonded to the same iPhone, ANCS uses last-in-first-get — the watch that subscribed to Notification Source most recently receives events. Only one watch active at a time.
 
 16. **ANCS doesn't send REMOVE when call is answered**: When an incoming call is answered on iPhone, ANCS sends a MODIFIED event (EventID=1), not REMOVED. REMOVED only comes when the call fully ends. The call overlay must handle MODIFIED to transition to "Active on iPhone" state, otherwise it stays showing "Incoming Call" for the entire call duration.
+
+17. **Telecom is optional on Wear OS**: Some watches (OnePlus Watch 2) don't ship `android.software.telecom`; `registerPhoneAccount` throws `UnsupportedOperationException` and crashed the service on start. Guard with `hasSystemFeature(FEATURE_TELECOM)`; calls fall back to `IncomingCallActivity` + CallStyle notification.
+
+18. **A Bluetooth restart leaves a dead `BluetoothGatt` with no callback**: Toggle, stack crash or OTA reboot kills every GATT client without `onConnectionStateChange`, so state stayed `Connecting` and `reconnect()` skipped as "already connecting". Listen to `ACTION_STATE_CHANGED`: reset on TURNING_OFF/OFF, reconnect on ON (falling back to the bonded iPhone, since a service started with Bluetooth off never set a target).
+
+19. **ANCS attribute tuples split anywhere across GATT packets**: The parser must not start a tuple until ID + 2-byte length are buffered. JVM unit tests need `unitTests.isReturnDefaultValues = true`, or `android.util.Log` throws and every parser test fails before asserting (this hid the bug).

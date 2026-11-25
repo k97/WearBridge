@@ -13,6 +13,10 @@
 - Transfer Wear OS health/fitness data to iPhone via BLE + HealthKit
 - Requires custom BLE service on both sides + HealthKit entitlement
 
+## Quick Reply List Sync
+- The iOS app's editable reply list stays on the iPhone; the watch uses its hard-coded `QUICK_REPLIES`
+- Sync it over a companion characteristic (read on connect, notify on change)
+
 ## iOS Shortcut Template
 - Provide a pre-built "WearBridge Reply" shortcut for download
 - Currently users must create the iOS Shortcut manually to handle quick reply text

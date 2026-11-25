@@ -48,3 +48,6 @@ targets:
       - AncsBridgeTests
     dependencies:
       - target: AncsBridge
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES

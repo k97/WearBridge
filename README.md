@@ -39,6 +39,7 @@ iPhone (iOS 26)                       Wear OS Watch
 | iPhone 17 Pro Max (iOS 26) | Notification source |
 | Google Pixel Watch 2 (Wear OS 5) | Primary watch |
 | Samsung Galaxy Watch (Wear OS) | Secondary — same APK |
+| OnePlus Watch 2 (Wear OS 5) | Community-tested ([#1](https://github.com/k97/WearBridge/issues/1)). No Telecom on this watch, so calls use the app's own call screen |
 
 ## How It Works
 
@@ -72,11 +73,22 @@ ANCS is a system-level BLE service built into iOS. Any bonded BLE accessory can 
 
 ## Build
 
+### Prebuilt from CI
+
+Every push to `main` and every pull request is built by [GitHub Actions](https://github.com/k97/WearBridge/actions/workflows/ci.yml). Open a green run and download from **Artifacts**:
+
+- `WearBridge-wearos-debug-apk`: install with `adb install -r app-debug.apk`
+- `WearBridge-ios-unsigned-ipa`: unsigned, so re-sign it with your own Apple ID in a sideloading tool (AltStore, SideStore, Sideloadly)
+
+Artifacts are kept for 14 days.
+
 ### Wear OS App
+
+Needs JDK 17 and the Android SDK (platform 35).
 
 ```bash
 cd wearos-app
-./gradlew assembleDebug
+./gradlew testDebugUnitTest assembleDebug
 ```
 
 Install on watch via ADB:
@@ -112,14 +124,14 @@ Unknown apps fall back to category-based icons (phone for calls, envelope for em
 - [x] **Vibration Tuning** — Category-aware haptics via direct Vibrator API (50ms messages, double-tap calls)
 - [x] **Notification Icons** — 37 padded Material Design icons + Lucide call icons
 - [x] **WhatsApp Call Detection** — Heuristic detection of VoIP calls from WhatsApp/FaceTime
-- [ ] **Quick Reply BLE Transport** — Wire decline-with-message text to iOS companion app via custom BLE characteristic
+- [x] **Quick Reply BLE Transport** — Decline-with-message text sent to the iOS companion over a custom BLE characteristic
 - [ ] **App Icon Support** — Expand to full-color Play Store PNGs as `largeIcon`
 - [ ] **Multi-Device Pairing** — Support switching between multiple Wear OS watches
 - [ ] **Health Data Bridge** — Transfer Wear OS health/fitness data to iPhone via BLE + HealthKit
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+Contributions are welcome! Feel free to open issues or submit pull requests. CI runs the Wear OS unit tests and both builds on every pull request. If you have built something in a fork, please open a PR: fork branches aren't visible here unless you do.
 
 ## License
 

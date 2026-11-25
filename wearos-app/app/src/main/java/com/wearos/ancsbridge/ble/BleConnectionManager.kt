@@ -7,6 +7,8 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.wearos.ancsbridge.model.ConnectionState
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +39,20 @@ class BleConnectionManager(private val context: Context) {
         private const val INITIAL_RECONNECT_DELAY_MS = 3_000L
         private const val TARGET_MTU = 512
         private const val MAX_SERVICE_DISCOVERY_RETRIES = 2
+        private const val PREFS_NAME = "wearbridge"
+        private const val KEY_PAIRED_IPHONE = "paired_iphone_address"
+
+        /**
+         * The bonded device that last gave us an ANCS session. Name matching alone misses
+         * iPhones that were renamed, or that bonded without a name (paired from iPhone
+         * Settings -> Bluetooth), so getBondedIPhone() returned null after a reboot.
+         */
+        fun savedIPhone(context: Context): BluetoothDevice? {
+            val address = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_PAIRED_IPHONE, null) ?: return null
+            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+            return adapter?.bondedDevices?.firstOrNull { it.address == address }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -58,6 +74,8 @@ class BleConnectionManager(private val context: Context) {
     private var reconnectJob: Job? = null
     private var reconnectDelay = INITIAL_RECONNECT_DELAY_MS
     private var autoReconnect = true
+    /** The user chose Disconnect: Bluetooth coming back on must not reconnect. */
+    private var userDisconnected = false
 
     // CCCD write queue — must serialize descriptor writes
     private val descriptorWriteQueue = LinkedList<Pair<BluetoothGattCharacteristic, BluetoothGattDescriptor>>()
@@ -68,8 +86,12 @@ class BleConnectionManager(private val context: Context) {
     private var controlPointChar: BluetoothGattCharacteristic? = null
     private var dataSourceChar: BluetoothGattCharacteristic? = null
 
+    // Bond events come for every device the watch pairs with (earbuds...): only the iPhone's matter.
+    private fun isTarget(device: BluetoothDevice) = device.address == targetDevice?.address
+
     val bondStateReceiver = BondStateReceiver(
         onBonded = { device ->
+            if (!isTarget(device)) return@BondStateReceiver
             Log.i(TAG, "Bond completed, re-discovering services")
             // Small delay after bonding before service discovery
             scope.launch {
@@ -78,6 +100,7 @@ class BleConnectionManager(private val context: Context) {
             }
         },
         onBondFailed = { device ->
+            if (!isTarget(device)) return@BondStateReceiver
             Log.e(TAG, "Bond failed")
             _connectionState.value = ConnectionState.Error("Pairing failed")
             disconnect()
@@ -108,6 +131,9 @@ class BleConnectionManager(private val context: Context) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Service discovery failed: $status")
                 _connectionState.value = ConnectionState.Error("Service discovery failed")
+                // Drop the link so the normal reconnect starts over, instead of
+                // leaving a live link with nothing subscribed.
+                gatt.disconnect()
                 return@GattCallback
             }
 
@@ -178,6 +204,12 @@ class BleConnectionManager(private val context: Context) {
             isWritingDescriptor = false
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Descriptor write failed: $status for ${descriptor.characteristic.uuid}")
+                when (descriptor.characteristic.uuid) {
+                    // Without these there is no ANCS session: start over.
+                    AncsConstants.DATA_SOURCE_UUID, AncsConstants.NOTIFICATION_SOURCE_UUID -> gatt?.disconnect()
+                    // Companion subscriptions are optional: carry on with the queue.
+                    else -> processDescriptorWriteQueue()
+                }
                 return@GattCallback
             }
 
@@ -189,6 +221,13 @@ class BleConnectionManager(private val context: Context) {
                 }
                 AncsConstants.NOTIFICATION_SOURCE_UUID -> {
                     Log.i(TAG, "Subscribed to Notification Source — ANCS session active!")
+                    gatt?.device?.address?.let { address ->
+                        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .edit().putString(KEY_PAIRED_IPHONE, address).apply()
+                    }
+                    // The bonded-but-no-ANCS retry connects with autoReconnect off; a working
+                    // session should reconnect on its own again.
+                    if (targetDevice != null) autoReconnect = true
                     // Show initial name (may be truncated BLE name)
                     val deviceName = resolveDeviceName()
                     _connectionState.value = ConnectionState.Connected(deviceName)
@@ -239,18 +278,16 @@ class BleConnectionManager(private val context: Context) {
 
         reconnectJob?.cancel()
         this.autoReconnect = autoReconnect
+        this.userDisconnected = false
         this.targetDevice = device
         this.serviceDiscoveryRetries = 0
 
         _connectionState.value = ConnectionState.Connecting(if (isTruncatedBleName(device.name ?: "")) "iPhone" else (device.name ?: "iPhone"))
 
+        // A new link starts from scratch: stale characteristics would make it skip the ANCS subscription.
+        clearCharacteristics()
         gatt?.close()
-        gatt = device.connectGatt(
-            context,
-            false, // autoConnect=false for faster initial connection
-            gattCallback,
-            BluetoothDevice.TRANSPORT_LE
-        )
+        gatt = connectGatt(device, autoConnect = false) // faster initial connection
     }
 
     /**
@@ -268,17 +305,57 @@ class BleConnectionManager(private val context: Context) {
         reconnectJob?.cancel()
         this.targetDevice = device
         this.autoReconnect = true
+        this.userDisconnected = false
         this.serviceDiscoveryRetries = 0
 
         _connectionState.value = ConnectionState.Connecting(if (isTruncatedBleName(device.name ?: "")) "iPhone" else (device.name ?: "iPhone"))
 
+        clearCharacteristics()
         gatt?.close()
-        gatt = device.connectGatt(
+        gatt = connectGatt(device, autoConnect = true) // chipset whitelist, battery efficient
+    }
+
+    /**
+     * GATT callbacks run on the main thread, like the coroutines that share this
+     * class's state (characteristics, descriptor queue, reconnect job).
+     * Null (Bluetooth off) is treated like a disconnect.
+     */
+    private fun connectGatt(device: BluetoothDevice, autoConnect: Boolean): BluetoothGatt? {
+        val connection = device.connectGatt(
             context,
-            true, // autoConnect=true uses chipset whitelist, battery efficient
+            autoConnect,
             gattCallback,
-            BluetoothDevice.TRANSPORT_LE
+            BluetoothDevice.TRANSPORT_LE,
+            BluetoothDevice.PHY_LE_1M_MASK,
+            Handler(Looper.getMainLooper())
         )
+        if (connection == null) {
+            Log.w(TAG, "connectGatt failed (Bluetooth off?)")
+            _connectionState.value = ConnectionState.Disconnected()
+            if (autoReconnect) scheduleReconnect()
+        }
+        return connection
+    }
+
+    /**
+     * Bluetooth was turned back on: reconnect right away instead of waiting for the backoff.
+     * Falls back to the bonded iPhone when there is no target yet: a service started with
+     * Bluetooth off sees no bonded devices, so it never set one.
+     */
+    fun onBluetoothOn() {
+        if (userDisconnected) return
+        val device = targetDevice ?: getBondedIPhone() ?: return
+        reconnectDelay = INITIAL_RECONNECT_DELAY_MS
+        reconnect(device)
+    }
+
+    /** The stack is gone: our BluetoothGatt is dead and no disconnect callback will come. */
+    fun onBluetoothOff() {
+        reconnectJob?.cancel()
+        clearCharacteristics()
+        gatt?.close()
+        gatt = null
+        _connectionState.value = ConnectionState.Disconnected("Bluetooth off")
     }
 
     /**
@@ -426,6 +503,7 @@ class BleConnectionManager(private val context: Context) {
 
     fun disconnect() {
         autoReconnect = false
+        userDisconnected = true
         reconnectJob?.cancel()
         gatt?.disconnect()
         gatt?.close()
@@ -439,6 +517,7 @@ class BleConnectionManager(private val context: Context) {
      * Get the bonded iPhone device if one exists.
      */
     fun getBondedIPhone(): BluetoothDevice? {
+        savedIPhone(context)?.let { return it }
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = bluetoothManager.adapter ?: return null
         return adapter.bondedDevices?.firstOrNull { device ->

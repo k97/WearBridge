@@ -8,9 +8,11 @@ iPhone → Wear OS notification mirroring via BLE/ANCS. All local, no cloud rela
 ## Commands
 
 ```bash
-# Build Wear OS (no local Java — use Android Studio's JBR)
+# Build + test Wear OS (JDK 17: Homebrew openjdk@17 or Android Studio's JBR; SDK via ANDROID_HOME)
 cd wearos-app
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+./gradlew testDebugUnitTest assembleDebug
 
 # Deploy to watch
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -42,12 +44,13 @@ adb logcat --pid=$(adb shell pidof com.wearos.ancsbridge)
 ## Rules
 
 - [BLE & ANCS Protocol](/.claude/rules/ble-ancs-protocol.md) — connection flow, Telecom calls, channels, icon mapping
-- [Gotchas & Past Bugs](/.claude/rules/gotchas.md) — 16 documented footguns
+- [Gotchas & Past Bugs](/.claude/rules/gotchas.md) — 19 documented footguns
 - [Future Work](/.claude/rules/future-work.md) — full-color icons, multi-device, health data
 
 ## Verification
 
 After making changes:
-- `cd wearos-app && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug` — Build Wear OS app
+- `cd wearos-app && ./gradlew testDebugUnitTest assembleDebug` — Unit tests + build Wear OS app (env above)
+- CI (`.github/workflows/ci.yml`) runs the same on every PR, plus iOS simulator tests and an unsigned device build
 - `cd ios-app && xcodebuild -project AncsBridge.xcodeproj -scheme AncsBridge -sdk iphoneos build` — Build iOS app
 - `adb install -r app/build/outputs/apk/debug/app-debug.apk` — Deploy and test on watch

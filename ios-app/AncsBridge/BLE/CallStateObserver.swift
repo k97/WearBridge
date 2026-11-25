@@ -17,39 +17,53 @@ class CallStateObserver: NSObject {
     private(set) var currentState: UInt8 = BLEConstants.callStateIdle
 
     private var isObserving = false
+    private var idleReset: DispatchWorkItem?
+
+    /// What the watch needs to know about one call.
+    struct CallInfo: Equatable {
+        let isOutgoing: Bool
+        let hasConnected: Bool
+        let hasEnded: Bool
+    }
 
     func startObserving() {
         guard !isObserving else { return }
         callObserver.setDelegate(self, queue: nil)
         isObserving = true
+        currentState = Self.state(of: callObserver.calls.map(Self.info), previous: BLEConstants.callStateIdle)
         logger.info("Started observing call state")
     }
 
     func stopObserving() {
+        callObserver.setDelegate(nil, queue: nil)
         isObserving = false
+        idleReset?.cancel()
+        idleReset = nil
         currentState = BLEConstants.callStateIdle
         logger.info("Stopped observing call state")
     }
-}
 
-extension CallStateObserver: CXCallObserverDelegate {
-
-    func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
-        let newState: UInt8
-
-        if call.hasEnded {
-            newState = BLEConstants.callStateEnded
-        } else if call.isOutgoing {
-            // We only care about incoming calls for the watch overlay
-            return
-        } else if call.hasConnected {
-            // Incoming call was answered
-            newState = BLEConstants.callStateActive
-        } else {
-            // Incoming call is ringing
-            newState = BLEConstants.callStateRinging
+    /// The state to show on the watch, from every call iOS knows about. An incoming call still
+    /// ringing wins (call waiting), then an answered incoming call. Outgoing calls are ignored:
+    /// the watch only shows incoming ones. When the last incoming call goes away the watch gets
+    /// "ended", which `callChanged` turns back into idle 2 s later.
+    static func state(of calls: [CallInfo], previous: UInt8) -> UInt8 {
+        let incoming = calls.filter { !$0.isOutgoing && !$0.hasEnded }
+        if incoming.contains(where: { !$0.hasConnected }) { return BLEConstants.callStateRinging }
+        if !incoming.isEmpty { return BLEConstants.callStateActive }
+        switch previous {
+        case BLEConstants.callStateRinging, BLEConstants.callStateActive, BLEConstants.callStateEnded:
+            return BLEConstants.callStateEnded
+        default:
+            return BLEConstants.callStateIdle
         }
+    }
 
+    private static func info(_ call: CXCall) -> CallInfo {
+        CallInfo(isOutgoing: call.isOutgoing, hasConnected: call.hasConnected, hasEnded: call.hasEnded)
+    }
+
+    private func publish(_ newState: UInt8) {
         guard newState != currentState else { return }
         currentState = newState
 
@@ -61,15 +75,31 @@ extension CallStateObserver: CXCallObserverDelegate {
         default: stateStr = "idle"
         }
         logger.info("Call state changed: \(stateStr)")
-
         onCallStateChanged?(newState)
+    }
+}
 
-        // Reset to idle after ended, with a short delay
-        if newState == BLEConstants.callStateEnded {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.currentState = BLEConstants.callStateIdle
-                self?.onCallStateChanged?(BLEConstants.callStateIdle)
+extension CallStateObserver: CXCallObserverDelegate {
+
+    func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
+        guard isObserving else { return }
+
+        // `calls` plus the call that just changed, in case the list lags behind the callback.
+        var calls = Dictionary(callObserver.calls.map { ($0.uuid, Self.info($0)) }, uniquingKeysWith: { _, last in last })
+        calls[call.uuid] = Self.info(call)
+
+        idleReset?.cancel()
+        idleReset = nil
+        publish(Self.state(of: Array(calls.values), previous: currentState))
+
+        // Back to idle shortly after "ended", unless another call changed things meanwhile.
+        if currentState == BLEConstants.callStateEnded {
+            let reset = DispatchWorkItem { [weak self] in
+                guard let self, self.isObserving, self.currentState == BLEConstants.callStateEnded else { return }
+                self.publish(BLEConstants.callStateIdle)
             }
+            idleReset = reset
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: reset)
         }
     }
 }

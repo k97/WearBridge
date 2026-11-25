@@ -324,18 +324,8 @@ extension PeripheralManager: CBPeripheralManagerDelegate {
     }
 
     private func handleQuickReply(_ payload: String) {
-        let encoded = payload.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? payload
-        let urlString = "shortcuts://run-shortcut?name=WearBridge%20Reply&input=text&text=\(encoded)"
-        if let url = URL(string: urlString) {
-            DispatchQueue.main.async {
-                UIApplication.shared.open(url) { success in
-                    if success {
-                        self.logger.info("Opened WearBridge Reply shortcut")
-                    } else {
-                        self.logger.error("Failed to open Shortcuts — is 'WearBridge Reply' shortcut created?")
-                    }
-                }
-            }
+        DispatchQueue.main.async {
+            QuickReplyLauncher.shared.deliver(payload)
         }
     }
 

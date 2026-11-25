@@ -39,6 +39,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        // JVM unit tests have no android.util.Log; without this every parser test throws.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
