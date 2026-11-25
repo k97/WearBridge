@@ -12,6 +12,7 @@
 		246322911A02C982C0331924 /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076673E488AFB468ED2E2EF9 /* StatusView.swift */; };
 		25BCDC2B3260F8615BAF50A9 /* PairedDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6C58B6974D26A3FA57422FB /* PairedDevice.swift */; };
 		3444128F7B515916482238DB /* CallStateObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDD1DF5401A97F3ECA524FC /* CallStateObserver.swift */; };
+		7B1C2D3E4F50617283940A1B /* QuickReplyLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2D3E4F50617283940A1B2C /* QuickReplyLauncher.swift */; };
 		3DA84E7D7CE3E1D3A54D315E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 77C36C2AFA8EA8C56AF8471D /* Assets.xcassets */; };
 		4181448E736418ED1E58AEFC /* AddWatchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B0BF9F2B6715DF8C2DDD8B8 /* AddWatchView.swift */; };
 		5A538DB399C1CBD93A665EBA /* QuickReplyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C8FAE0AB0196096C3D7552 /* QuickReplyStore.swift */; };
@@ -43,6 +44,7 @@
 		1BB2863CCCC6897C7008FFB7 /* AncsBridgeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AncsBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4027EE6B08DD2500C1BF6E94 /* BLEConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BLEConstants.swift; sourceTree = "<group>"; };
 		4CD7E830A5834A54112C3678 /* PeripheralManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeripheralManager.swift; sourceTree = "<group>"; };
+		8C2D3E4F50617283940A1B2C /* QuickReplyLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickReplyLauncher.swift; sourceTree = "<group>"; };
 		523A43621478CD12C73CC964 /* Info-Generated.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info-Generated.plist"; sourceTree = "<group>"; };
 		5D80699CA7470D90625E8874 /* AncsBridge.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AncsBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DAFE504FCCF42292D6F4FE8 /* AncsBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AncsBridgeTests.swift; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
 				4027EE6B08DD2500C1BF6E94 /* BLEConstants.swift */,
 				DDDD1DF5401A97F3ECA524FC /* CallStateObserver.swift */,
 				4CD7E830A5834A54112C3678 /* PeripheralManager.swift */,
+				8C2D3E4F50617283940A1B2C /* QuickReplyLauncher.swift */,
 			);
 			path = BLE;
 			sourceTree = "<group>";
@@ -252,6 +255,7 @@
 				98910C98FC720871E4544C25 /* HowItWorksView.swift in Sources */,
 				25BCDC2B3260F8615BAF50A9 /* PairedDevice.swift in Sources */,
 				E0FE400394C388A4F3E3D11E /* PeripheralManager.swift in Sources */,
+				7B1C2D3E4F50617283940A1B /* QuickReplyLauncher.swift in Sources */,
 				BADFA7CC5AEE06DFBD06B68F /* QuickReplySettingsView.swift in Sources */,
 				5A538DB399C1CBD93A665EBA /* QuickReplyStore.swift in Sources */,
 				B6CCF526A866F740469E261D /* SettingsStore.swift in Sources */,
@@ -288,6 +292,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
+				GENERATE_INFOPLIST_FILE = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wearos.AncsBridgeTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -304,6 +309,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
+				GENERATE_INFOPLIST_FILE = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.wearos.AncsBridgeTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

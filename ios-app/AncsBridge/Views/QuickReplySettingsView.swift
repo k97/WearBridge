@@ -57,7 +57,7 @@ struct QuickReplySettingsView: View {
             } header: {
                 Text("Messages")
             } footer: {
-                Text("These messages appear when you decline a call from your watch. Tap to edit, swipe to delete.")
+                Text("Your list of replies, kept on this iPhone. The watch doesn't use it yet: it offers its own built-in replies when you decline a call.")
             }
 
             // Reset
@@ -98,7 +98,7 @@ struct QuickReplySettingsView: View {
             } header: {
                 Text("Siri Shortcut")
             } footer: {
-                Text("When you decline a call with a reply on your watch, WearBridge sends the caller name and message to this Shortcut via Bluetooth.")
+                Text("When you decline a call with a reply on your watch, WearBridge sends the caller name and message to this Shortcut via Bluetooth. If the iPhone is locked or WearBridge is in the background, you get a notification instead: tap it to send the reply (iOS only lets apps run Shortcuts from the foreground).")
             }
         }
         .navigationTitle("Quick Reply")

@@ -360,7 +360,7 @@ struct StatusView: View {
     private var statusIcon: String {
         switch viewModel.peripheralManager.bluetoothState {
         case .poweredOn:
-            return viewModel.peripheralManager.discoveredWatches.isEmpty ? "antenna.radiowaves.left.and.right" : "checkmark.circle.fill"
+            return connectedWatchCount == 0 ? "antenna.radiowaves.left.and.right" : "checkmark.circle.fill"
         case .poweredOff: return "xmark.circle.fill"
         case .unauthorized: return "lock.circle.fill"
         default: return "circle.dashed"
@@ -376,8 +376,13 @@ struct StatusView: View {
         }
     }
 
+    /// Saved watches that are offline are in `discoveredWatches` too.
+    private var connectedWatchCount: Int {
+        viewModel.peripheralManager.discoveredWatches.filter(\.isConnected).count
+    }
+
     private var statusTitle: String {
-        let count = viewModel.peripheralManager.discoveredWatches.count
+        let count = connectedWatchCount
         switch viewModel.peripheralManager.bluetoothState {
         case .poweredOn:
             return count > 0 ? "Connected" : "ANCS Active"
@@ -388,7 +393,7 @@ struct StatusView: View {
     }
 
     private var statusSubtitle: String {
-        let count = viewModel.peripheralManager.discoveredWatches.count
+        let count = connectedWatchCount
         switch viewModel.peripheralManager.bluetoothState {
         case .poweredOn:
             return count > 0
