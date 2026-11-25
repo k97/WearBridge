@@ -26,6 +26,7 @@ class CallDetectionTest {
         assertTrue(detect("Marie", "☎ Incoming voice call"))
         assertTrue(detect("Marie", "Incoming video call"))
         assertTrue(detect("Paul is calling", "", app = "com.example.voip", positive = true))
+        assertTrue(detect("Marie", "Ringing…"))
     }
 
     @Test

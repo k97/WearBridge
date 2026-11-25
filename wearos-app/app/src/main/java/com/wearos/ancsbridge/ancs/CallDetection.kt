@@ -12,7 +12,7 @@ import com.wearos.ancsbridge.ble.AncsConstants
 object CallDetection {
 
     private val ringing = Regex(
-        """\bincoming\s+(voice\s+|video\s+|audio\s+)?call\b|\bis\s+calling\b|☎""",
+        """\bincoming\s+(voice\s+|video\s+|audio\s+)?call\b|\bis\s+calling\b|\bringing\b|☎""",
         RegexOption.IGNORE_CASE
     )
     private val missed = Regex("""\bmissed\b|\bmanqu""", RegexOption.IGNORE_CASE)
