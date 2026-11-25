@@ -143,6 +143,47 @@ class DataSourceAssemblerTest {
     }
 
     @Test
+    fun `fragment boundary right after attribute ID`() {
+        val requestedAttrs = listOf(AncsConstants.ATTR_APP_IDENTIFIER, AncsConstants.ATTR_TITLE)
+        assembler.expectNotificationAttributes(uid = 1, requestedAttributes = requestedAttrs, category = 0, flags = 0)
+
+        val fullResponse = buildResponse(0, 1, listOf(0 to "app", 1 to "Bob"))
+        // Header(5) + attr0 tuple(3 + 3) + attr1_id(1) = 12: no length byte in the first fragment
+        val splitAt = 12
+
+        assertNull(assembler.onDataReceived(fullResponse.copyOfRange(0, splitAt)))
+        val notification = assembler.onDataReceived(fullResponse.copyOfRange(splitAt, fullResponse.size))
+        assertNotNull(notification)
+        assertEquals("app", notification!!.appIdentifier)
+        assertEquals("Bob", notification.title)
+    }
+
+    @Test
+    fun `every fragment boundary reassembles the same notification`() {
+        val requestedAttrs = listOf(
+            AncsConstants.ATTR_APP_IDENTIFIER,
+            AncsConstants.ATTR_TITLE,
+            AncsConstants.ATTR_SUBTITLE,
+            AncsConstants.ATTR_MESSAGE
+        )
+        val fullResponse = buildResponse(
+            0, 7, listOf(0 to "com.apple.MobileSMS", 1 to "Alice", 2 to "", 3 to "See you at 8")
+        )
+
+        for (splitAt in 1 until fullResponse.size) {
+            val fresh = DataSourceAssembler()
+            fresh.expectNotificationAttributes(uid = 7, requestedAttributes = requestedAttrs, category = 0, flags = 0)
+            assertNull("split at $splitAt", fresh.onDataReceived(fullResponse.copyOfRange(0, splitAt)))
+            val n = fresh.onDataReceived(fullResponse.copyOfRange(splitAt, fullResponse.size))
+            assertNotNull("split at $splitAt", n)
+            assertEquals("split at $splitAt", "com.apple.MobileSMS", n!!.appIdentifier)
+            assertEquals("split at $splitAt", "Alice", n.title)
+            assertEquals("split at $splitAt", "", n.subtitle)
+            assertEquals("split at $splitAt", "See you at 8", n.message)
+        }
+    }
+
+    @Test
     fun `reset clears state`() {
         assembler.expectNotificationAttributes(
             uid = 1,
