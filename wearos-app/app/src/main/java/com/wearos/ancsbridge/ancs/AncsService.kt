@@ -5,8 +5,12 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.IBinder
 import android.os.Vibrator
 import android.util.Log
@@ -105,6 +109,7 @@ class AncsService : Service() {
 
         // Register bond state receiver
         registerReceiver(connectionManager.bondStateReceiver, BondStateReceiver.intentFilter)
+        registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
         // Register PhoneAccount for Telecom framework integration
         // This lets us show incoming calls via the system call UI
@@ -218,10 +223,31 @@ class AncsService : Service() {
         super.onDestroy()
         try {
             unregisterReceiver(connectionManager.bondStateReceiver)
+            unregisterReceiver(bluetoothStateReceiver)
         } catch (_: IllegalArgumentException) { }
         connectionManager.destroy()
         attributeRequestQueue.close()
         scope.cancel()
+    }
+
+    /**
+     * A Bluetooth restart (toggle, stack crash, OTA, some OEM co-processor handovers) kills
+     * every GATT client without an onConnectionStateChange callback, so the service stayed
+     * in Connecting/Connected with a dead BluetoothGatt. Reset on OFF, reconnect on ON.
+     */
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_OFF -> {
+                    Log.w(TAG, "Bluetooth going off: resetting connection")
+                    connectionManager.onBluetoothOff()
+                }
+                BluetoothAdapter.STATE_ON -> {
+                    Log.i(TAG, "Bluetooth back on: reconnecting")
+                    tryReconnectBonded()
+                }
+            }
+        }
     }
 
     private fun tryReconnectBonded() {
