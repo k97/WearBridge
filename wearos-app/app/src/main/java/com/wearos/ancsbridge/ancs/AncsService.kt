@@ -109,6 +109,7 @@ class AncsService : Service() {
 
         // Register bond state receiver
         registerReceiver(connectionManager.bondStateReceiver, BondStateReceiver.intentFilter)
+        // Reset on Bluetooth off, reconnect as soon as it comes back on
         registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
 
         // Register PhoneAccount for Telecom framework integration
@@ -155,6 +156,13 @@ class AncsService : Service() {
                     }
                     is ConnectionState.Disconnected -> "Disconnected"
                     is ConnectionState.Error -> "Error: ${state.message}"
+                }
+                // The link dropped while a call was ringing: its REMOVED will never come.
+                if (state !is ConnectionState.Connected && state !is ConnectionState.Connecting &&
+                    activeCallUid != -1L
+                ) {
+                    Log.i(TAG, "Link lost during a call; dismissing the call screen")
+                    endActiveCall()
                 }
                 notificationManager.notify(SERVICE_NOTIFICATION_ID, buildServiceNotification(text))
             }
@@ -223,6 +231,8 @@ class AncsService : Service() {
         super.onDestroy()
         try {
             unregisterReceiver(connectionManager.bondStateReceiver)
+        } catch (_: IllegalArgumentException) { }
+        try {
             unregisterReceiver(bluetoothStateReceiver)
         } catch (_: IllegalArgumentException) { }
         connectionManager.destroy()
@@ -243,11 +253,22 @@ class AncsService : Service() {
                     connectionManager.onBluetoothOff()
                 }
                 BluetoothAdapter.STATE_ON -> {
-                    Log.i(TAG, "Bluetooth back on: reconnecting")
-                    tryReconnectBonded()
+                    Log.i(TAG, "Bluetooth on: reconnecting")
+                    connectionManager.onBluetoothOn()
                 }
             }
         }
+    }
+
+    /** Dismisses the call screen, Telecom call and call notification. */
+    private fun endActiveCall() {
+        activeCallUid = -1
+        vibrator.cancel()
+        notificationManager.cancel(NOTIFICATION_ID_CALL)
+        AncsConnectionService.endActiveCall()
+        sendBroadcast(Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
+            setPackage(packageName)
+        })
     }
 
     private fun tryReconnectBonded() {
@@ -340,16 +361,11 @@ class AncsService : Service() {
                 notificationManager.cancel(removedId)
                 activeNotificationIds.remove(removedId)
 
-                // If this was an incoming call, dismiss everything
-                if (event.isIncomingCall || activeCallUid == event.notificationUid) {
+                // If this was the call on screen, dismiss everything (not for another
+                // call ending while a second one rings: call waiting).
+                if (activeCallUid == event.notificationUid) {
                     Log.i(TAG, "Call ended (REMOVE) uid=${event.notificationUid}")
-                    activeCallUid = -1
-                    vibrator.cancel()
-                    notificationManager.cancel(NOTIFICATION_ID_CALL)
-                    AncsConnectionService.endActiveCall()
-                    sendBroadcast(Intent(IncomingCallActivity.ACTION_CALL_ENDED).apply {
-                        setPackage(packageName)
-                    })
+                    endActiveCall()
                 }
             }
         }
@@ -463,20 +479,14 @@ class AncsService : Service() {
             "net.whatsapp.WhatsApp", "net.whatsapp.WhatsAppSMB",
             "com.apple.mobilephone", "com.apple.facetime"
         )
-        val messageAndTitle = "${notification.message} ${notification.title}"
-        val hasCallIndicator = messageAndTitle.contains("Incoming Call", ignoreCase = true) ||
-            messageAndTitle.contains("Incoming Voice", ignoreCase = true) ||
-            messageAndTitle.contains("Incoming Video", ignoreCase = true) ||
-            messageAndTitle.contains("Incoming Audio", ignoreCase = true) ||
-            messageAndTitle.contains("☎") ||
-            messageAndTitle.contains("Audio Call", ignoreCase = true) ||
-            messageAndTitle.contains("Video Call", ignoreCase = true) ||
-            messageAndTitle.contains("Voice Call", ignoreCase = true) ||
-            messageAndTitle.contains("is calling", ignoreCase = true) ||
-            messageAndTitle.contains("Ringing", ignoreCase = true)
-        val isIncomingCall = notification.categoryId == AncsConstants.CATEGORY_INCOMING_CALL ||
-            (notification.positiveActionLabel != null && hasCallIndicator) ||
-            (notification.appIdentifier in callApps && hasCallIndicator)
+        val isIncomingCall = CallDetection.isIncomingCall(
+            categoryId = notification.categoryId,
+            appIdentifier = notification.appIdentifier,
+            title = notification.title,
+            message = notification.message,
+            hasPositiveAction = notification.positiveActionLabel != null,
+            callApps = callApps
+        )
 
         if (isIncomingCall) {
             Log.i(TAG, "Showing incoming call screen for ${notification.title}")
@@ -587,6 +597,8 @@ class AncsService : Service() {
         evictOldestIfNeeded()
 
         notificationManager.notify(notifId, builder.build())
+        // An update (MODIFIED) re-posts the same ID: keep one entry per notification.
+        activeNotificationIds.remove(notifId)
         activeNotificationIds.addLast(notifId)
     }
 

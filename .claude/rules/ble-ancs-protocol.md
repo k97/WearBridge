@@ -27,6 +27,9 @@
 - `START_STICKY` service + `BootReceiver` for persistence
 - `getBondedIPhone()` matches device names containing "iPhone", "AncsBrid", "AncsBridge", "WearBrid", "WearBridge"
 - GAP Device Name characteristic (0x2A00) read after ANCS connects for real iPhone name
+- GATT callbacks run on the main thread (`connectGatt` with a main-looper `Handler`), like the coroutines sharing the connection state
+- Bluetooth turned back on → immediate reconnect (`ACTION_STATE_CHANGED`); a failed service discovery or ANCS CCCD write drops the link so the normal reconnect starts over; bond events for other devices are ignored
+- A link lost while a call rings dismisses the call screen (its REMOVED never comes)
 
 ## Silent/Pre-existing Notification Handling
 

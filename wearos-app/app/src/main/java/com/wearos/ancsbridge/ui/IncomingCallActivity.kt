@@ -77,6 +77,7 @@ class IncomingCallActivity : ComponentActivity() {
     private var notificationUid: Long = -1
     private var showingReplies = mutableStateOf(false)
     private var callerNameState = mutableStateOf("Unknown Caller")
+    private var appNameState = mutableStateOf("Phone")
     /** true = call was answered on iPhone, show "Active on iPhone" UI */
     private var callAnsweredOnPhone = mutableStateOf(false)
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -116,7 +117,7 @@ class IncomingCallActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         callerNameState.value = intent.getStringExtra(EXTRA_CALLER_NAME) ?: "Unknown Caller"
-        val appName = intent.getStringExtra(EXTRA_APP_NAME) ?: "Phone"
+        appNameState.value = intent.getStringExtra(EXTRA_APP_NAME) ?: "Phone"
         notificationUid = intent.getLongExtra(EXTRA_NOTIFICATION_UID, -1)
 
         val filter = IntentFilter().apply {
@@ -134,6 +135,7 @@ class IncomingCallActivity : ComponentActivity() {
                 val showReplies by showingReplies
                 val callerName by callerNameState
                 val answeredOnPhone by callAnsweredOnPhone
+                val appName by appNameState
 
                 if (answeredOnPhone) {
                     CallActiveOnPhoneScreen(
@@ -170,6 +172,19 @@ class IncomingCallActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** A new call while this screen is still up (singleInstance): start over with it. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handler.removeCallbacksAndMessages(null)
+        callAnsweredOnPhone.value = false
+        showingReplies.value = false
+        callerNameState.value = intent.getStringExtra(EXTRA_CALLER_NAME) ?: "Unknown Caller"
+        appNameState.value = intent.getStringExtra(EXTRA_APP_NAME) ?: "Phone"
+        notificationUid = intent.getLongExtra(EXTRA_NOTIFICATION_UID, -1)
+        handler.postDelayed({ finish() }, AUTO_DISMISS_TIMEOUT_MS)
     }
 
     override fun onDestroy() {
